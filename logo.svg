@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <!-- 深渊背景渐变 -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090a0f" />
+      <stop offset="100%" stop-color="#151822" />
+    </linearGradient>
+    <!-- 高光泛光效果 -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- 1. 圆角背景 -->
+  <rect width="400" height="400" fill="url(#bg)" rx="80" />
+
+  <!-- 2. 十六进制底纹 (隐藏的汇编彩蛋) -->
+  <g fill="#1f2433" font-family="monospace" font-size="10" letter-spacing="3" opacity="0.6">
+    <text x="30" y="50">80B5 0020 044A 1368 0C33 0023 5A1C</text>
+    <text x="30" y="70">002B 02D1 0948 0068 0047 80B5 0020</text>
+    <text x="30" y="340">F749 7944 F04A 4A44 526D 126D 9047</text>
+    <text x="30" y="360">E92D 4FF0 044A 1368 0C33 0023 5A1C</text>
+  </g>
+
+  <!-- 3. N 和 C 的几何解构 (短线矩阵风格) -->
+  <g transform="translate(65, 110)" fill="none" stroke-linecap="square" stroke-linejoin="miter">
+    <!-- N (荧光绿，代表运行与生机) -->
+    <path d="M 40,140 L 40,20 L 110,140 L 110,20" stroke="#00ff41" stroke-width="16" stroke-dasharray="16, 12" />
+    <!-- C (代码蓝，代表冰冷的宿主环境) -->
+    <path d="M 230,20 L 160,20 L 160,140 L 230,140" stroke="#00b8ff" stroke-width="16" stroke-dasharray="16, 12" />
+  </g>
+
+  <!-- 4. 核心彩蛋：0xC 陷阱表高亮节点 -->
+  <circle cx="225" cy="130" r="10" fill="#ff0055" filter="url(#glow)" />
+  <circle cx="225" cy="130" r="4" fill="#ffffff" />
+  <text x="245" y="135" fill="#ff0055" font-family="monospace" font-size="14" font-weight="bold" filter="url(#glow)">[r9+0xC]</text>
+
+  <!-- 5. 底部组织名称 -->
+  <text x="200" y="270" fill="#a0aabf" font-family="monospace" font-size="28" font-weight="bold" text-anchor="middle" letter-spacing="2">
+    nieche<tspan fill="#00ff41">_</tspan>emu
+  </text>
+</svg>

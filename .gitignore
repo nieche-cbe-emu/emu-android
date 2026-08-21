@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+build/
+.gradle/
+local.properties
+app/build/
+app/src/main/python/emu/
+app/src/main/python/cbelib/
+app/src/main/python/unicorn/
+app/src/main/python/capstone/
