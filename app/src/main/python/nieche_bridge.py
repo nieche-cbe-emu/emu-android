@@ -42,10 +42,6 @@ def set_touch(x, y, state):
     if _session:
         _session.set_touch(int(x), int(y), state)
 
-def soft_key(side, pressed=True):
-    if _session:
-        _session.soft_key(side, bool(pressed))
-
 def events():
     return _session.take_events_json() if _session else "[]"
 
