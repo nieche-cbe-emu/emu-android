@@ -5,7 +5,7 @@ object Keys {
         "lsk" to (1 shl 12),
         "rsk" to (1 shl 13),
         "call" to (1 shl 20),
-        "end" to 0,
+        "end" to (1 shl 13),
         "up" to ((1 shl 2) or (1 shl 17)),
         "down" to ((1 shl 8) or (1 shl 18)),
         "left" to ((1 shl 4) or (1 shl 15)),

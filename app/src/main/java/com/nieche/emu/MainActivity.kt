@@ -38,6 +38,7 @@ class MainActivity : AppCompatActivity() {
     private val touchLock = Any()
 
     private val touchQueue = ArrayDeque<Triple<Int, Int, String>>()
+    private val softQueue = java.util.concurrent.ConcurrentLinkedQueue<String>()
 
     private var bmp: Bitmap? = null
     private var held = mutableSetOf<String>()
@@ -141,7 +142,14 @@ class MainActivity : AppCompatActivity() {
 
             setOnTouchListener { v, e ->
                 when (e.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> { held.add(id); pushKeys(); v.isPressed = true }
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        held.add(id); pushKeys(); v.isPressed = true
+
+                        when (id) {
+                            "lsk" -> softQueue.add("left")
+                            "rsk" -> softQueue.add("right")
+                        }
+                    }
                     android.view.MotionEvent.ACTION_UP,
                     android.view.MotionEvent.ACTION_CANCEL -> { held.remove(id); pushKeys(); v.isPressed = false }
                 }
@@ -308,11 +316,13 @@ class MainActivity : AppCompatActivity() {
                 lastMask = m
             }
 
-            var sent = 0
-            while (sent < 4) {
+            while (true) {
                 val t = synchronized(touchLock) { touchQueue.removeFirstOrNull() } ?: break
                 py.callAttr("set_touch", t.first, t.second, t.third)
-                sent++
+            }
+            while (true) {
+                val side = softQueue.poll() ?: break
+                py.callAttr("soft_key", side, true)
             }
             val px = py.callAttr("step").toJava(ByteArray::class.java)
             if (px.isNotEmpty()) {
