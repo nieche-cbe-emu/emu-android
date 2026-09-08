@@ -44,6 +44,8 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile private var fps = 20
 
+    private var statusBase = ""
+
     private val pickFile = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> if (uri != null) importAndRun(uri) }
@@ -102,11 +104,15 @@ class MainActivity : AppCompatActivity() {
         fps = getSharedPreferences("nieche", MODE_PRIVATE).getInt("fps", fps)
         fpsButton = Button(this).apply {
             text = "${fps}fps"
-            setOnClickListener { cycleFps() }
+            setOnClickListener { askFps() }
         }
         bar.addView(fpsButton)
         topBar = bar
-        root.addView(bar)
+
+        root.addView(android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(bar)
+        })
 
         status = TextView(this).apply {
             setPadding(16, 0, 16, 4)
@@ -160,12 +166,32 @@ class MainActivity : AppCompatActivity() {
 
     private val rowH by lazy { (32 * resources.displayMetrics.density).toInt() }
 
-    private val fpsChoices = intArrayOf(5, 10, 15, 20, 25, 30, 45, 60)
+    private val FPS_MIN = 1
+    private val FPS_MAX = 240
     private lateinit var fpsButton: Button
 
-    private fun cycleFps() {
-        val i = fpsChoices.indexOf(fps)
-        fps = fpsChoices[(if (i < 0) 3 else i + 1) % fpsChoices.size]
+    private fun askFps() {
+        val input = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(fps.toString())
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("帧率")
+            .setMessage("这就是游戏速度：模块按帧推进，跑多快游戏就多快。\n" +
+                        "真机上这些游戏大概只有 10-15fps。范围 $FPS_MIN-$FPS_MAX。")
+            .setView(input)
+            .setPositiveButton("好") { _, _ ->
+
+                val v = input.text.toString().toIntOrNull() ?: fps
+                setFps(v.coerceIn(FPS_MIN, FPS_MAX))
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun setFps(v: Int) {
+        fps = v
         fpsButton.text = "${fps}fps"
         getSharedPreferences("nieche", MODE_PRIVATE).edit().putInt("fps", fps).apply()
     }
@@ -296,7 +322,8 @@ class MainActivity : AppCompatActivity() {
                 val b = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
                 ui.post {
                     bmp = b
-                    status.text = "${file.name}  ${w}x${h}"
+                    statusBase = "${file.name}  ${w}x${h}"
+                    status.text = statusBase
                     title = file.nameWithoutExtension
                 }
                 loop(b)
@@ -349,12 +376,13 @@ class MainActivity : AppCompatActivity() {
             }
             val dt = System.currentTimeMillis() - t0
             if (dt < period) try { Thread.sleep(period - dt) } catch (_: InterruptedException) {}
-            if (++tick >= 60) {
+
+            if (++tick >= 30) {
                 val now = System.currentTimeMillis()
-                android.util.Log.i("nieche", "实际 %.1f fps（上限 %d）"
-                    .format(60000.0 / (now - mark), fps))
+                val real = 30000.0 / (now - mark).coerceAtLeast(1)
                 tick = 0
                 mark = now
+                ui.post { status.text = "%s  实测 %.1f fps".format(statusBase, real) }
             }
         }
     }
