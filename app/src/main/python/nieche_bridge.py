@@ -9,26 +9,42 @@ def init(native_lib_dir, data_dir):
     os.environ["LIBUNICORN_PATH"] = native_lib_dir
     os.environ["LIBCAPSTONE_PATH"] = native_lib_dir
 
+    os.environ["NIECHE_LIB"] = os.path.join(native_lib_dir, "libnieche.so")
+
     os.environ["NIECHE_HOME"] = data_dir
     return check()
 
 def check():
 
     try:
+        from emu.native import load
+        return f"Rust 核心已加载（ABI {load().nieche_abi_version()}）"
+    except Exception as e:
+        native_err = f"{type(e).__name__}: {e}"
+    try:
         import unicorn
         import capstone
-        return f"unicorn {unicorn.__version__ if hasattr(unicorn, '__version__') else '?'} / "               f"capstone {capstone.__version__ if hasattr(capstone, '__version__') else '?'} 已加载"
+        return (f"回落到 Python 核心（Rust 核心不可用：{native_err}）；"
+                f"unicorn {getattr(unicorn, '__version__', '?')} / "
+                f"capstone {getattr(capstone, '__version__', '?')} 已加载")
     except Exception as e:
-        return f"原生库加载失败: {type(e).__name__}: {e}"
+        return f"两个核心都加载失败: Rust={native_err}  Python={type(e).__name__}: {e}"
+
+core = "?"
 
 def start(path, audio=False):
 
-    global _session
+    global _session, core
     stop()
-    from emu.host import Session
-    _session = Session(path, audio=audio).boot()
+    from emu.native import open_session
+    sess, core = open_session(path, audio=audio)
+    _session = sess.boot()
     w, h = _session.size
     return f"{w},{h}"
+
+def which_core():
+
+    return core
 
 def step():
 
@@ -56,7 +72,7 @@ def selftest(path, frames=40):
         t0 = time.time()
         for _ in range(frames):
             step()
-            n = _session.rt.fb.nonblank()
+            n = _session.nonblank
         fps = frames / max(1e-6, time.time() - t0)
         w, h = _session.size
         from emu import font as _f
