@@ -41,7 +41,8 @@ class MainActivity : AppCompatActivity() {
 
     private var bmp: Bitmap? = null
     private var held = mutableSetOf<String>()
-    private var fps = 30
+
+    @Volatile private var fps = 20
 
     private val pickFile = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -98,6 +99,12 @@ class MainActivity : AppCompatActivity() {
             text = "复位缩放"
             setOnClickListener { screen.resetZoom() }
         })
+        fps = getSharedPreferences("nieche", MODE_PRIVATE).getInt("fps", fps)
+        fpsButton = Button(this).apply {
+            text = "${fps}fps"
+            setOnClickListener { cycleFps() }
+        }
+        bar.addView(fpsButton)
         topBar = bar
         root.addView(bar)
 
@@ -152,6 +159,17 @@ class MainActivity : AppCompatActivity() {
         }
 
     private val rowH by lazy { (32 * resources.displayMetrics.density).toInt() }
+
+    private val fpsChoices = intArrayOf(5, 10, 15, 20, 25, 30, 45, 60)
+    private lateinit var fpsButton: Button
+
+    private fun cycleFps() {
+        val i = fpsChoices.indexOf(fps)
+        fps = fpsChoices[(if (i < 0) 3 else i + 1) % fpsChoices.size]
+        fpsButton.text = "${fps}fps"
+        getSharedPreferences("nieche", MODE_PRIVATE).edit().putInt("fps", fps).apply()
+    }
+
     private val padRows = mutableListOf<LinearLayout>()
     private lateinit var pad: LinearLayout
     private lateinit var topBar: LinearLayout
@@ -294,9 +312,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loop(b: Bitmap) {
-        val period = 1000L / fps
         var lastMask = -1
+
+        var tick = 0
+        var mark = System.currentTimeMillis()
         while (running) {
+
+            val period = 1000L / fps
             val t0 = System.currentTimeMillis()
 
             val m = synchronized(keyLock) {
@@ -327,6 +349,13 @@ class MainActivity : AppCompatActivity() {
             }
             val dt = System.currentTimeMillis() - t0
             if (dt < period) try { Thread.sleep(period - dt) } catch (_: InterruptedException) {}
+            if (++tick >= 60) {
+                val now = System.currentTimeMillis()
+                android.util.Log.i("nieche", "实际 %.1f fps（上限 %d）"
+                    .format(60000.0 / (now - mark), fps))
+                tick = 0
+                mark = now
+            }
         }
     }
 

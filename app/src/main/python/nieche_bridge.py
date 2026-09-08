@@ -6,9 +6,6 @@ _session = None
 
 def init(native_lib_dir, data_dir):
 
-    os.environ["LIBUNICORN_PATH"] = native_lib_dir
-    os.environ["LIBCAPSTONE_PATH"] = native_lib_dir
-
     os.environ["NIECHE_LIB"] = os.path.join(native_lib_dir, "libnieche.so")
 
     os.environ["NIECHE_HOME"] = data_dir
@@ -17,34 +14,21 @@ def init(native_lib_dir, data_dir):
 def check():
 
     try:
-        from emu.native import load
-        return f"Rust 核心已加载（ABI {load().nieche_abi_version()}）"
+        import nieche
+        if not nieche.selftest():
+            return "核心已加载但自检没过——原生层跑不动"
+        return f"Rust 核心已加载（ABI {nieche.load().nieche_abi_version()}）"
     except Exception as e:
-        native_err = f"{type(e).__name__}: {e}"
-    try:
-        import unicorn
-        import capstone
-        return (f"回落到 Python 核心（Rust 核心不可用：{native_err}）；"
-                f"unicorn {getattr(unicorn, '__version__', '?')} / "
-                f"capstone {getattr(capstone, '__version__', '?')} 已加载")
-    except Exception as e:
-        return f"两个核心都加载失败: Rust={native_err}  Python={type(e).__name__}: {e}"
-
-core = "?"
+        return f"核心加载失败: {type(e).__name__}: {e}"
 
 def start(path, audio=False):
 
-    global _session, core
+    global _session
     stop()
-    from emu.native import open_session
-    sess, core = open_session(path, audio=audio)
-    _session = sess.boot()
+    from nieche import NiecheSession
+    _session = NiecheSession(path, audio=audio).boot()
     w, h = _session.size
     return f"{w},{h}"
-
-def which_core():
-
-    return core
 
 def step():
 
