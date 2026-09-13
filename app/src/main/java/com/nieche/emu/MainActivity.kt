@@ -109,6 +109,22 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { askFps() }
         }
         bar.addView(fpsButton)
+        val prefs = getSharedPreferences("nieche", MODE_PRIVATE)
+        bar.addView(Button(this).apply {
+            val modes = ScreenView.Mode.values()
+            val saved = prefs.getString("upscale", null)
+            val start = modes.firstOrNull { it.name == saved } ?: ScreenView.Mode.SHARP
+            text = start.label
+            tag = start
+            setOnClickListener {
+
+                val next = modes[((tag as ScreenView.Mode).ordinal + 1) % modes.size]
+                tag = next
+                text = next.label
+                screen.mode = next
+                prefs.edit().putString("upscale", next.name).apply()
+            }
+        })
         topBar = bar
 
         root.addView(android.widget.HorizontalScrollView(this).apply {
@@ -124,6 +140,9 @@ class MainActivity : AppCompatActivity() {
         root.addView(status)
 
         screen = ScreenView(this)
+        screen.mode = ScreenView.Mode.values().firstOrNull {
+            it.name == getSharedPreferences("nieche", MODE_PRIVATE).getString("upscale", null)
+        } ?: ScreenView.Mode.SHARP
         screen.onTouchGuest = { x, y, st ->
             synchronized(touchLock) {
 

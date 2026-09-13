@@ -17,7 +17,18 @@ class ScreenView @JvmOverloads constructor(
 
     private var bmp: Bitmap? = null
     private val paint = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
+    private val smoothPaint = Paint().apply { isFilterBitmap = true }
     private val dst = RectF()
+
+    enum class Mode(val label: String) { SHARP("锐利"), PIXEL("像素"), SMOOTH("平滑") }
+
+    var mode = Mode.SHARP
+        set(v) { field = v; invalidate() }
+
+    private var pre: Bitmap? = null
+    private var preCanvas: Canvas? = null
+    private val preSrc = android.graphics.Rect()
+    private val preDst = android.graphics.Rect()
 
     private var userScale = 1f
     private var panX = 0f
@@ -90,7 +101,31 @@ class ScreenView @JvmOverloads constructor(
         drawX = (width - w) / 2 + panX
         drawY = (height - h) / 2 + panY
         dst.set(drawX, drawY, drawX + w, drawY + h)
-        canvas.drawBitmap(b, null, dst, paint)
+        when (mode) {
+            Mode.PIXEL -> canvas.drawBitmap(b, null, dst, paint)
+            Mode.SMOOTH -> canvas.drawBitmap(b, null, dst, smoothPaint)
+            Mode.SHARP -> {
+                val n = kotlin.math.ceil(s.toDouble() - 1e-3).toInt().coerceIn(1, 8)
+                if (n == 1) {
+                    canvas.drawBitmap(b, null, dst, smoothPaint)
+                } else {
+
+                    val pw = b.width * n
+                    val ph = b.height * n
+                    var p = pre
+                    if (p == null || p.width != pw || p.height != ph) {
+                        p?.recycle()
+                        p = Bitmap.createBitmap(pw, ph, Bitmap.Config.RGB_565)
+                        pre = p
+                        preCanvas = Canvas(p)
+                    }
+                    preSrc.set(0, 0, b.width, b.height)
+                    preDst.set(0, 0, pw, ph)
+                    preCanvas!!.drawBitmap(b, preSrc, preDst, paint)
+                    canvas.drawBitmap(p!!, null, dst, smoothPaint)
+                }
+            }
+        }
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
