@@ -61,8 +61,10 @@ class MainActivity : AppCompatActivity() {
         val msg = py.callAttr("init",
             applicationInfo.nativeLibraryDir,
             File(filesDir, "nieche").absolutePath).toString()
-        status.text = msg
-        android.util.Log.i("nieche", "init: " + msg)
+
+        val ver = packageManager.getPackageInfo(packageName, 0).versionName
+        status.text = "v$ver  $msg"
+        android.util.Log.i("nieche", "init: v$ver " + msg)
 
         intent?.getStringExtra("autorun")?.let { path -> startEmu(File(path)) }
 
@@ -249,6 +251,10 @@ class MainActivity : AppCompatActivity() {
     private fun fitLayout() {
         rootBox.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             val vis = android.graphics.Rect()
+
+            val ime = androidx.core.view.ViewCompat.getRootWindowInsets(rootBox)
+                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+            if (ime) return@addOnLayoutChangeListener
             rootBox.getWindowVisibleDisplayFrame(vis)
             val padH = rowH * padRows.size + pad.paddingTop + pad.paddingBottom
             val h = vis.height() - navBarH - rootBox.top - topBar.height - status.height - padH
