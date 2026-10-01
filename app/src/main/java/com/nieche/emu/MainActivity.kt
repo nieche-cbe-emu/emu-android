@@ -20,6 +20,7 @@ import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import java.io.File
 import java.nio.ByteBuffer
+import org.json.JSONArray
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,6 +32,14 @@ class MainActivity : AppCompatActivity() {
     private val ui = Handler(Looper.getMainLooper())
     @Volatile private var running = false
 
+    @Volatile private var paused = false
+    private val idleStop = Runnable {
+        if (running) {
+            stopEmu()
+            status.text = "已保存并停止"
+        }
+    }
+
     @Volatile private var keyMask = 0
 
     private val keyLock = Any()
@@ -39,6 +48,9 @@ class MainActivity : AppCompatActivity() {
 
     private val touchQueue = ArrayDeque<Triple<Int, Int, String>>()
 
+    private val softQueue = ArrayDeque<String>()
+
+    private val audio = AudioOut()
     private var bmp: Bitmap? = null
     private var held = mutableSetOf<String>()
 
@@ -103,7 +115,17 @@ class MainActivity : AppCompatActivity() {
             text = "复位缩放"
             setOnClickListener { screen.resetZoom() }
         })
-        fps = getSharedPreferences("nieche", MODE_PRIVATE).getInt("fps", fps)
+        val prefs = getSharedPreferences("nieche", MODE_PRIVATE)
+        audio.enabled = prefs.getBoolean("sound", true)
+        bar.addView(Button(this).apply {
+            text = if (audio.enabled) "声音 开" else "声音 关"
+            setOnClickListener {
+                audio.enabled = !audio.enabled
+                text = if (audio.enabled) "声音 开" else "声音 关"
+                prefs.edit().putBoolean("sound", audio.enabled).apply()
+            }
+        })
+        fps = prefs.getInt("fps", fps)
         fpsButton = Button(this).apply {
             text = "${fps}fps"
             setOnClickListener { askFps() }
@@ -158,6 +180,8 @@ class MainActivity : AppCompatActivity() {
                 when (e.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
                         held.add(id); pushKeys(); v.isPressed = true
+
+                        if (id == "rsk") synchronized(touchLock) { softQueue.add("right") }
                     }
                     android.view.MotionEvent.ACTION_UP,
                     android.view.MotionEvent.ACTION_CANCEL -> { held.remove(id); pushKeys(); v.isPressed = false }
@@ -316,10 +340,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun startEmu(file: File) {
         stopEmu()
+        ui.removeCallbacks(idleStop)
         running = true
+        paused = false
         held.clear()
         keyMask = 0
-        synchronized(touchLock) { touchQueue.clear() }
+        synchronized(touchLock) { touchQueue.clear(); softQueue.clear() }
         synchronized(keyLock) { keyLatch = 0 }
         val t = Thread {
             try {
@@ -351,6 +377,12 @@ class MainActivity : AppCompatActivity() {
         var mark = System.currentTimeMillis()
         while (running) {
 
+            if (paused) {
+                lastMask = -1
+                try { Thread.sleep(100) } catch (_: InterruptedException) {}
+                continue
+            }
+
             val period = 1000L / fps
             val t0 = System.currentTimeMillis()
 
@@ -369,14 +401,34 @@ class MainActivity : AppCompatActivity() {
                 val t = synchronized(touchLock) { touchQueue.removeFirstOrNull() } ?: break
                 py.callAttr("set_touch", t.first, t.second, t.third)
             }
+            while (true) {
+                val s = synchronized(touchLock) { softQueue.removeFirstOrNull() } ?: break
+                py.callAttr("soft_key", s)
+            }
             val px = py.callAttr("step").toJava(ByteArray::class.java)
             if (px.isNotEmpty()) {
 
                 b.copyPixelsFromBuffer(ByteBuffer.wrap(px))
                 ui.post { screen.setFrame(b) }
             }
+
+            var bye = false
             val ev = py.callAttr("events").toString()
-            if (ev.contains("\"exit\"")) {
+            if (ev.length > 2) {
+                try {
+                    val arr = JSONArray(ev)
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue
+                        when (o.optString("kind")) {
+                            "exit" -> bye = true
+                            "audio" -> ui.post { audio.handle(o) }
+                        }
+                    }
+                } catch (e: org.json.JSONException) {
+                    bye = ev.contains("\"exit\"")
+                }
+            }
+            if (bye) {
                 ui.post { stopEmu() }
                 return
             }
@@ -396,6 +448,8 @@ class MainActivity : AppCompatActivity() {
     private fun stopEmu() {
         if (!running && thread == null) return
         running = false
+        paused = false
+        audio.stop()
 
         thread?.join(3000)
         thread = null
@@ -406,8 +460,37 @@ class MainActivity : AppCompatActivity() {
         status.text = "已停止"
     }
 
+    override fun onStart() {
+        super.onStart()
+        ui.removeCallbacks(idleStop)
+        if (running && paused) {
+            paused = false
+            audio.resume()
+
+            held.clear()
+            pushKeys()
+            status.text = statusBase
+        }
+    }
+
+    override fun onStop() {
+        if (running && !isFinishing) {
+            paused = true
+            audio.pause()
+            status.text = "$statusBase  已暂停"
+            ui.postDelayed(idleStop, IDLE_STOP_MS)
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        ui.removeCallbacks(idleStop)
         stopEmu()
         super.onDestroy()
+    }
+
+    private companion object {
+
+        const val IDLE_STOP_MS = 30_000L
     }
 }
