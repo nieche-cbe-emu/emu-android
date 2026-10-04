@@ -12,10 +12,10 @@ android {
         applicationId "com.nieche.emu"
         minSdk 24
         targetSdk 34
-        versionCode 38
-        versionName "0.3.7"
+        versionCode 40
+        versionName "0.3.9"
         ndk {
-
+            // 只出这两个 ABI —— libnieche.so 就是按它们交叉编译的
             abiFilters "arm64-v8a", "armeabi-v7a"
         }
         python {
@@ -26,7 +26,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.debug   // 只发 GitHub，不上架，debug 签名足够
         }
     }
     compileOptions {
@@ -34,7 +34,10 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = '17' }
-
+    // **必须解压到 nativeLibraryDir**。设成 false 的话 .so 留在 apk 里由 linker
+    // 直接映射，磁盘上根本没有这个文件——而 nieche.py 是先 os.path.exists(路径)
+    // 再 CDLL 的，找不到文件就直接报"找不到核心库"。
+    // 代价是安装后多占一份空间，无所谓。
     packagingOptions { jniLibs { useLegacyPackaging = true } }
 }
 
