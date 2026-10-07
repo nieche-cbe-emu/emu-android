@@ -3,7 +3,7 @@ pluginManagement {
         gradlePluginPortal()
         google()
         mavenCentral()
-        // Chaquopy（把 CPython 嵌进 apk 的 gradle 插件）不在中央仓库里
+
         maven { url "https://chaquo.com/maven" }
     }
 }
