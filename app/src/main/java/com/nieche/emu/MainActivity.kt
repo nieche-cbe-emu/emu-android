@@ -51,7 +51,8 @@ class MainActivity : AppCompatActivity() {
     private val softQueue = ArrayDeque<String>()
 
     private val audio = AudioOut()
-    private var bmp: Bitmap? = null
+
+    private val freeFrames = java.util.concurrent.ConcurrentLinkedQueue<Bitmap>()
     private var held = mutableSetOf<String>()
 
     @Volatile private var fps = 20
@@ -86,8 +87,13 @@ class MainActivity : AppCompatActivity() {
             File(filesDir, "nieche").absolutePath).toString()
 
         val ver = packageManager.getPackageInfo(packageName, 0).versionName
-        status.text = "v$ver  $msg"
-        android.util.Log.i("nieche", "init: v$ver " + msg)
+
+        val core = try {
+            assets.open("core.stamp").bufferedReader().readText().trim()
+                .split(" ").getOrNull(1)?.let { " · 核心 $it" } ?: ""
+        } catch (_: java.io.IOException) { "" }
+        status.text = "v$ver$core  $msg"
+        android.util.Log.i("nieche", "init: v$ver$core " + msg)
 
         intent?.getStringExtra("autorun")?.let { path -> startEmu(File(path)) }
 
@@ -424,14 +430,13 @@ class MainActivity : AppCompatActivity() {
             try {
                 val size = py.callAttr("start", file.absolutePath, false).toString()
                 val (w, h) = size.split(",").map { it.trim().toInt() }
-                val b = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
+                freeFrames.clear()
                 ui.post {
-                    bmp = b
                     statusBase = "${file.name}  ${w}x${h}"
                     status.text = statusBase
                     title = file.nameWithoutExtension
                 }
-                loop(b)
+                loop(w, h)
             } catch (e: Throwable) {
                 ui.post { status.text = "启动失败：${e.message}" }
             } finally {
@@ -443,8 +448,11 @@ class MainActivity : AppCompatActivity() {
         t.start()
     }
 
-    private fun loop(first: Bitmap) {
-        var b = first
+    private fun loop(startW: Int, startH: Int) {
+        var fw = startW
+        var fh = startH
+
+        var allocated = 0
         var lastMask = -1
 
         var tick = 0
@@ -482,24 +490,36 @@ class MainActivity : AppCompatActivity() {
             val px = py.callAttr("step").toJava(ByteArray::class.java)
             if (px.isNotEmpty()) {
 
-                if (px.size != b.byteCount) {
+                if (px.size != fw * fh * 2) {
                     val (w, h) = py.callAttr("size").toString().split(",").map { it.trim().toInt() }
 
                     if (w > 0 && h > 0 && w * h * 2 == px.size) {
-                        val nb = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
-                        b = nb
+                        fw = w
+                        fh = h
+                        freeFrames.clear()
+                        allocated = 0
                         ui.post {
-                            bmp = nb
                             statusBase = statusBase.replace(Regex("\\d+x\\d+$"), "${w}x${h}")
                             status.text = statusBase
                         }
                     }
                 }
-                if (px.size == b.byteCount) {
+                if (px.size == fw * fh * 2) {
+                    var target = freeFrames.poll()
+                    if (target != null && (target.width != fw || target.height != fh)) target = null
+                    if (target == null && allocated < MAX_FRAMES) {
+                        target = Bitmap.createBitmap(fw, fh, Bitmap.Config.RGB_565)
+                        allocated++
+                    }
+                    if (target != null) {
 
-                    b.copyPixelsFromBuffer(ByteBuffer.wrap(px))
-                    val shown = b
-                    ui.post { screen.setFrame(shown) }
+                        target.copyPixelsFromBuffer(ByteBuffer.wrap(px))
+                        val shown = target
+                        ui.post {
+                            val old = screen.setFrame(shown)
+                            if (old != null && old !== shown) freeFrames.offer(old)
+                        }
+                    }
                 }
             }
 
@@ -544,7 +564,6 @@ class MainActivity : AppCompatActivity() {
 
         thread?.join(3000)
         thread = null
-        bmp = null
         held.clear()
         keyMask = 0
         screen.clear()
@@ -583,5 +602,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
 
         const val IDLE_STOP_MS = 30_000L
+
+        const val MAX_FRAMES = 4
     }
 }

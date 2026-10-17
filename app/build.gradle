@@ -12,8 +12,8 @@ android {
         applicationId "com.nieche.emu"
         minSdk 24
         targetSdk 34
-        versionCode 40
-        versionName "0.3.9"
+        versionCode 41
+        versionName "0.4.0"
         ndk {
 
             abiFilters "arm64-v8a", "armeabi-v7a"
@@ -44,3 +44,29 @@ dependencies {
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 }
+
+tasks.register('checkCoreFresh') {
+    doLast {
+        def script = rootProject.file('../tools/core_stamp.py')
+        if (!script.exists() || !rootProject.file('../rust').exists()) {
+            logger.lifecycle('checkCoreFresh：旁边没有核心源码，跳过')
+            return
+        }
+        def stamp = file('src/main/assets/core.stamp')
+        if (!stamp.exists()) {
+            throw new GradleException('没有 assets/core.stamp：先跑 tools/build-android.sh 编出核心')
+        }
+        def have = stamp.text.trim().split(' ')[0]
+        def proc = ['python3', script.path, '--hash'].execute()
+        def want = proc.text.trim()
+        proc.waitFor()
+        if (proc.exitValue() != 0 || want.isEmpty()) {
+            throw new GradleException('算不出核心指纹：python3 tools/core_stamp.py --hash 失败')
+        }
+        if (have != want) {
+            throw new GradleException("libnieche.so 比 rust/ 旧（编的时候是 ${have}，现在是 ${want}）：先跑 tools/build-android.sh")
+        }
+        logger.lifecycle("checkCoreFresh：核心是最新的（${have}）")
+    }
+}
+preBuild.dependsOn checkCoreFresh

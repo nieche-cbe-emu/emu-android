@@ -61,9 +61,11 @@ class ScreenView @JvmOverloads constructor(
             }
         })
 
-    fun setFrame(b: Bitmap) {
+    fun setFrame(b: Bitmap): Bitmap? {
+        val old = bmp
         bmp = b
         postInvalidateOnAnimation()
+        return old
     }
 
     fun clear() {
