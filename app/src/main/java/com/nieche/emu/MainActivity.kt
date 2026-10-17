@@ -33,6 +33,11 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var running = false
 
     @Volatile private var paused = false
+
+    @Volatile private var cheatPaused = false
+
+    @Volatile private var loopIdle = false
+    private val cheatState = CheatPanel.State()
     private val idleStop = Runnable {
         if (running) {
             stopEmu()
@@ -148,6 +153,10 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { askFps() }
         }
         bar.addView(fpsButton)
+        bar.addView(Button(this).apply {
+            text = "修改器"
+            setOnClickListener { openCheat() }
+        })
         topBar = bar
 
         root.addView(android.widget.HorizontalScrollView(this).apply {
@@ -365,6 +374,41 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun openCheat() {
+        if (!running) {
+            status.text = "先打开一个游戏"
+            return
+        }
+
+        loopIdle = false
+        cheatPaused = true
+        audio.pause()
+        status.text = "$statusBase  修改器（游戏已暂停）"
+        CheatPanel(this, py, ui, ::runCore, cheatState).show {
+            cheatPaused = false
+            if (running && !paused) {
+                audio.resume()
+                status.text = statusBase
+            }
+        }
+    }
+
+    private fun runCore(work: () -> Unit) {
+        Thread {
+            val t0 = System.currentTimeMillis()
+            while (running && !loopIdle && System.currentTimeMillis() - t0 < 3000) {
+                try { Thread.sleep(10) } catch (_: InterruptedException) {}
+            }
+            if (running && loopIdle) {
+                try {
+                    work()
+                } catch (e: Throwable) {
+                    android.util.Log.e("nieche", "修改器调用失败", e)
+                }
+            }
+        }.start()
+    }
+
     private fun setFps(v: Int) {
         fps = v
         fpsButton.text = "${fps}fps"
@@ -422,6 +466,8 @@ class MainActivity : AppCompatActivity() {
         ui.removeCallbacks(idleStop)
         running = true
         paused = false
+        cheatPaused = false
+        cheatState.clear()
         held.clear()
         keyMask = 0
         synchronized(touchLock) { touchQueue.clear(); softQueue.clear() }
@@ -459,11 +505,13 @@ class MainActivity : AppCompatActivity() {
         var mark = System.currentTimeMillis()
         while (running) {
 
-            if (paused) {
+            if (paused || cheatPaused) {
                 lastMask = -1
-                try { Thread.sleep(100) } catch (_: InterruptedException) {}
+                loopIdle = true
+                try { Thread.sleep(if (cheatPaused) 10 else 100) } catch (_: InterruptedException) {}
                 continue
             }
+            loopIdle = false
 
             val period = 1000L / fps
             val t0 = System.currentTimeMillis()
@@ -560,6 +608,8 @@ class MainActivity : AppCompatActivity() {
         if (!running && thread == null) return
         running = false
         paused = false
+        cheatPaused = false
+        cheatState.clear()
         audio.stop()
 
         thread?.join(3000)

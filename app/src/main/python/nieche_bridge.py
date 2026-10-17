@@ -54,6 +54,27 @@ def soft_key(side):
     if _session:
         _session.soft_key(side)
 
+def cheat_search(width, value):
+
+    return _session.cheat_search(int(width), int(value)) if _session else 0
+
+def cheat_reset():
+    if _session:
+        _session.cheat_reset()
+
+def cheat_results():
+
+    if not _session:
+        return ""
+    return ";".join(f"{a}:{v}" for a, v in _session.cheat_results())
+
+def cheat_write(addr, width, value):
+    return bool(_session and _session.cheat_write(int(addr), int(width), int(value)))
+
+def cheat_lock(addr, width, value, on):
+    if _session:
+        _session.cheat_lock(int(addr), int(width), int(value), bool(on))
+
 def events():
     return _session.take_events_json() if _session else "[]"
 
