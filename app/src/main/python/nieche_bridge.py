@@ -92,10 +92,7 @@ def selftest(path, frames=40):
             n = _session.nonblank
         fps = frames / max(1e-6, time.time() - t0)
         w, h = _session.size
-        from emu import font as _f
-        ok = _f.load() is not None
-        print(f"[selftest] {path} {w}x{h}，非黑像素 {n}/{w*h}，{fps:.1f} fps，"
-              f"字库{'已加载' if ok else '缺失(文字会变方块)'}")
+        print(f"[selftest] {path} {w}x{h}，非黑像素 {n}/{w*h}，{fps:.1f} fps")
         return f"ok {n} {fps:.1f}fps"
     except Exception as e:
         import traceback

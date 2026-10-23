@@ -6,7 +6,7 @@
 
 | 组件 | 许可证 | 说明 |
 | --- | --- | --- |
-| [unicorn-engine](https://www.unicorn-engine.org/) 2.1.5 | **GPL-2.0-only** | ARM CPU 模拟。源自 QEMU。 |
+| [unicorn-engine](https://www.unicorn-engine.org/) 2.1.5 | **GPL-2.0-only** | ARM CPU 模拟。源自 QEMU。emu-core-rs 带一份改过的源码（`vendor/unicorn-engine-sys`，改动见其中的 NIECHE-CHANGES.md）。 |
 | [capstone](https://www.capstone-engine.org/) 0.13 | MIT | 反汇编，只在排查和分析时用 |
 | encoding_rs 0.8 | (Apache-2.0 OR MIT) AND BSD-3-Clause | GBK ↔ Unicode |
 | miniz_oxide 0.8 | MIT OR Zlib OR Apache-2.0 | 资源解压 |
