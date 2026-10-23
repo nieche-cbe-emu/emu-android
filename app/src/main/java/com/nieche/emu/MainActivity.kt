@@ -51,6 +51,10 @@ class MainActivity : AppCompatActivity() {
     private var keyLatch = 0
     private val touchLock = Any()
 
+    private val coreLock = Any()
+
+    private val coreExec = java.util.concurrent.Executors.newSingleThreadExecutor()
+
     private val touchQueue = ArrayDeque<Triple<Int, Int, String>>()
 
     private val softQueue = ArrayDeque<String>()
@@ -394,19 +398,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun runCore(work: () -> Unit) {
-        Thread {
+        coreExec.execute {
             val t0 = System.currentTimeMillis()
             while (running && !loopIdle && System.currentTimeMillis() - t0 < 3000) {
                 try { Thread.sleep(10) } catch (_: InterruptedException) {}
             }
-            if (running && loopIdle) {
+            if (!running) return@execute
+            synchronized(coreLock) {
+                if (!running) return@synchronized
                 try {
                     work()
                 } catch (e: Throwable) {
                     android.util.Log.e("nieche", "修改器调用失败", e)
                 }
             }
-        }.start()
+        }
     }
 
     private fun setFps(v: Int) {
@@ -487,7 +493,7 @@ class MainActivity : AppCompatActivity() {
                 ui.post { status.text = "启动失败：${e.message}" }
             } finally {
 
-                try { py.callAttr("stop") } catch (_: Throwable) {}
+                synchronized(coreLock) { try { py.callAttr("stop") } catch (_: Throwable) {} }
             }
         }
         thread = t
@@ -521,58 +527,60 @@ class MainActivity : AppCompatActivity() {
                 keyLatch = 0
                 v
             }
-            py.callAttr("set_keys", m)
-            if (m != lastMask) {
-                android.util.Log.i("nieche", "keys=0x%08x".format(m))
-                lastMask = m
-            }
+            val ev = synchronized(coreLock) {
+                py.callAttr("set_keys", m)
+                if (m != lastMask) {
+                    android.util.Log.i("nieche", "keys=0x%08x".format(m))
+                    lastMask = m
+                }
 
-            while (true) {
-                val t = synchronized(touchLock) { touchQueue.removeFirstOrNull() } ?: break
-                py.callAttr("set_touch", t.first, t.second, t.third)
-            }
-            while (true) {
-                val s = synchronized(touchLock) { softQueue.removeFirstOrNull() } ?: break
-                py.callAttr("soft_key", s)
-            }
-            val px = py.callAttr("step").toJava(ByteArray::class.java)
-            if (px.isNotEmpty()) {
+                while (true) {
+                    val t = synchronized(touchLock) { touchQueue.removeFirstOrNull() } ?: break
+                    py.callAttr("set_touch", t.first, t.second, t.third)
+                }
+                while (true) {
+                    val s = synchronized(touchLock) { softQueue.removeFirstOrNull() } ?: break
+                    py.callAttr("soft_key", s)
+                }
+                val px = py.callAttr("step").toJava(ByteArray::class.java)
+                if (px.isNotEmpty()) {
 
-                if (px.size != fw * fh * 2) {
-                    val (w, h) = py.callAttr("size").toString().split(",").map { it.trim().toInt() }
+                    if (px.size != fw * fh * 2) {
+                        val (w, h) = py.callAttr("size").toString().split(",").map { it.trim().toInt() }
 
-                    if (w > 0 && h > 0 && w * h * 2 == px.size) {
-                        fw = w
-                        fh = h
-                        freeFrames.clear()
-                        allocated = 0
-                        ui.post {
-                            statusBase = statusBase.replace(Regex("\\d+x\\d+$"), "${w}x${h}")
-                            status.text = statusBase
+                        if (w > 0 && h > 0 && w * h * 2 == px.size) {
+                            fw = w
+                            fh = h
+                            freeFrames.clear()
+                            allocated = 0
+                            ui.post {
+                                statusBase = statusBase.replace(Regex("\\d+x\\d+$"), "${w}x${h}")
+                                status.text = statusBase
+                            }
+                        }
+                    }
+                    if (px.size == fw * fh * 2) {
+                        var target = freeFrames.poll()
+                        if (target != null && (target.width != fw || target.height != fh)) target = null
+                        if (target == null && allocated < MAX_FRAMES) {
+                            target = Bitmap.createBitmap(fw, fh, Bitmap.Config.RGB_565)
+                            allocated++
+                        }
+                        if (target != null) {
+
+                            target.copyPixelsFromBuffer(ByteBuffer.wrap(px))
+                            val shown = target
+                            ui.post {
+                                val old = screen.setFrame(shown)
+                                if (old != null && old !== shown) freeFrames.offer(old)
+                            }
                         }
                     }
                 }
-                if (px.size == fw * fh * 2) {
-                    var target = freeFrames.poll()
-                    if (target != null && (target.width != fw || target.height != fh)) target = null
-                    if (target == null && allocated < MAX_FRAMES) {
-                        target = Bitmap.createBitmap(fw, fh, Bitmap.Config.RGB_565)
-                        allocated++
-                    }
-                    if (target != null) {
 
-                        target.copyPixelsFromBuffer(ByteBuffer.wrap(px))
-                        val shown = target
-                        ui.post {
-                            val old = screen.setFrame(shown)
-                            if (old != null && old !== shown) freeFrames.offer(old)
-                        }
-                    }
-                }
+                py.callAttr("events").toString()
             }
-
             var bye = false
-            val ev = py.callAttr("events").toString()
             if (ev.length > 2) {
                 try {
                     val arr = JSONArray(ev)
