@@ -103,6 +103,9 @@ class MainActivity : AppCompatActivity() {
         } catch (_: java.io.IOException) { "" }
         status.text = "v$ver$core  $msg"
         android.util.Log.i("nieche", "init: v$ver$core " + msg)
+        if (getSharedPreferences("nieche", MODE_PRIVATE).getBoolean("bw_lock", false)) {
+            py.callAttr("bw_set_lock", true)
+        }
 
         intent?.getStringExtra("autorun")?.let { path -> startEmu(File(path)) }
 

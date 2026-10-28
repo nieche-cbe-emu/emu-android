@@ -39,6 +39,8 @@ class CheatPanel(
     private lateinit var widthSpin: Spinner
     private lateinit var searchBtn: Button
     private lateinit var info: TextView
+    private lateinit var root: LinearLayout
+    private var lockBtn: Button? = null
     private val rows = mutableListOf<Pair<Long, Long>>()
     private lateinit var rowAdapter: ArrayAdapter<String>
     private lateinit var lockAdapter: ArrayAdapter<String>
@@ -46,7 +48,7 @@ class CheatPanel(
     fun show(onClose: () -> Unit) {
         val pad = (12 * ctx.resources.displayMetrics.density).toInt()
         val listH = (200 * ctx.resources.displayMetrics.density).toInt()
-        val root = LinearLayout(ctx).apply {
+        root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, 0)
         }
@@ -95,6 +97,10 @@ class CheatPanel(
         refreshLabels()
         refreshLocks()
         if (state.count >= 0) loadRows()
+        core {
+            val kind = py.callAttr("mods_kind").toString()
+            ui.post { addModsRow(kind) }
+        }
 
         AlertDialog.Builder(ctx)
             .setTitle("修改器")
@@ -213,6 +219,114 @@ class CheatPanel(
             ui.post {
                 state.locks.remove(l)
                 refreshLocks()
+            }
+        }
+    }
+
+    private fun addModsRow(kind: String) {
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        fun add(b: Button) =
+            row.addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        when (kind) {
+            "BW" -> {
+                add(Button(ctx).apply {
+                    text = "武将等级"
+                    setOnClickListener { openLevels() }
+                })
+                val b = Button(ctx).apply { setOnClickListener { toggleLock() } }
+                lockBtn = b
+                add(b)
+                refreshLock()
+            }
+            "IsLet" -> add(Button(ctx).apply {
+                text = "生存点"
+                setOnClickListener { openPoints() }
+            })
+            else -> return
+        }
+        root.addView(row, 0)
+    }
+
+    private fun lockText(on: Boolean) = if (on) "锁定耐久：开" else "锁定耐久：关"
+
+    private fun refreshLock() {
+        lockBtn?.text = lockText(py.callAttr("bw_is_locked").toBoolean())
+    }
+
+    private fun toggleLock() {
+        val on = !py.callAttr("bw_is_locked").toBoolean()
+        ctx.getSharedPreferences("nieche", Context.MODE_PRIVATE).edit().putBoolean("bw_lock", on).apply()
+        core {
+            val msg = py.callAttr("bw_set_lock", on).toString()
+            ui.post {
+                lockBtn?.text = lockText(on)
+                info.text = msg
+            }
+        }
+    }
+
+    private fun openLevels() {
+        core {
+            val s = py.callAttr("bw_roster").toString()
+            ui.post {
+                if (s.isEmpty()) {
+                    info.text = "没找到武将表（游戏还没进到主菜单之后？）"
+                    return@post
+                }
+                val rows = s.split(";").map { it.split("|") }
+                val labels = rows.map { r ->
+                    "%s    %d 级%s".format(r[1], r[2].toInt(), if (r[3] == "1") "    在队" else "")
+                }.toTypedArray()
+                AlertDialog.Builder(ctx)
+                    .setTitle("选择武将（在出战名单界面改最稳）")
+                    .setItems(labels) { _, i -> askLevel(rows[i][0].toInt(), rows[i][1], rows[i][2].toInt()) }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun askLevel(idx: Int, name: String, cur: Int) {
+        val box = EditText(ctx).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(cur.toString())
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle("$name 的等级（1-99，50 级起属性满）")
+            .setView(box)
+            .setPositiveButton("确定") { _, _ ->
+                val lv = box.text.toString().trim().toIntOrNull() ?: return@setPositiveButton
+                core {
+                    val msg = py.callAttr("bw_set_level", idx, lv).toString()
+                    ui.post { info.text = msg }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun openPoints() {
+        core {
+            val cur = py.callAttr("island_points").toLong()
+            ui.post {
+                val box = EditText(ctx).apply {
+                    inputType = InputType.TYPE_CLASS_NUMBER
+                    setText(cur.coerceAtLeast(0).toString())
+                    setSelection(text.length)
+                }
+                AlertDialog.Builder(ctx)
+                    .setTitle("生存点（0-999999）")
+                    .setView(box)
+                    .setPositiveButton("确定") { _, _ ->
+                        val v = box.text.toString().trim().toLongOrNull() ?: return@setPositiveButton
+                        core {
+                            val msg = py.callAttr("island_set_points", v).toString()
+                            ui.post { info.text = msg }
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
             }
         }
     }

@@ -27,6 +27,8 @@ def start(path, audio=False):
     stop()
     from nieche import NiecheSession
     _session = NiecheSession(path, audio=audio).boot()
+    import gamemods
+    gamemods.reset()
     w, h = _session.size
     return f"{w},{h}"
 
@@ -39,7 +41,12 @@ def size():
 
 def step():
 
-    return _session.step() if _session else b""
+    if not _session:
+        return b""
+    px = _session.step()
+    import gamemods
+    gamemods.tick(_session)
+    return px
 
 def set_keys(mask):
     if _session:
@@ -74,6 +81,39 @@ def cheat_write(addr, width, value):
 def cheat_lock(addr, width, value, on):
     if _session:
         _session.cheat_lock(int(addr), int(width), int(value), bool(on))
+
+def mods_kind():
+
+    import gamemods
+    return gamemods.kind(_session)
+
+def bw_roster():
+
+    import gamemods
+    r = gamemods.roster(_session) if _session else None
+    if not r:
+        return ""
+    return ";".join(f"{i}|{n}|{lv}|{1 if p else 0}" for i, n, lv, p in r)
+
+def bw_set_level(idx, lv):
+    import gamemods
+    return gamemods.set_level(_session, int(idx), int(lv)) if _session else "没有在运行的游戏"
+
+def bw_set_lock(on):
+    import gamemods
+    return gamemods.set_lock(_session, bool(on))
+
+def bw_is_locked():
+    import gamemods
+    return gamemods.is_locked()
+
+def island_points():
+    import gamemods
+    return gamemods.island_points(_session)
+
+def island_set_points(v):
+    import gamemods
+    return gamemods.island_set_points(_session, int(v))
 
 def events():
     return _session.take_events_json() if _session else "[]"
